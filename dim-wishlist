@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# vim:sts=2:sw=2:et:
+#
+# dim-wishlist
+#
+# Creates a unified DIM wishlist file.
+#
+
+set -e
+
+if readlink `which dim-wishlist` &>/dev/null; then
+  cd $(dirname $(readlink `which dim-wishlist`))
+fi
+
+if [ ! -d "generated" ]; then
+  mkdir generated
+fi
+
+filename="dim-wishlist-$(date +"%s")"
+parentdir="$(dirname "$(pwd)")"
+wishlist="$(pwd)/generated/${filename}"
+declare -A sources
+
+while read line; do
+  if echo $line | grep -F = &>/dev/null; then
+    key=$(echo "$line" | cut -d '=' -f 1)
+    value=$(echo "$line" | cut -d '=' -f 2-)
+    sources[$key]=$value
+  fi
+done < sources.conf
+
+cat <<EOF > $wishlist
+title:$(whoami)'s wishlist
+description: Generated with https://github.com/geetarista/dim-wishlist-generator
+
+EOF
+
+for key in "${!sources[@]}"; do
+  printf "processing $key"
+
+  repo="${sources[$key]}"
+  source_path="${parentdir}/$key"
+
+  if [ ! -d "$source_path" ]; then
+    git clone $repo $source_path &>/dev/null
+  fi
+
+  pushd $source_path &>/dev/null
+
+  git pull &>/dev/null
+
+  for f in *.txt; do
+    printf "."
+    cat $f >> $wishlist
+    printf "\n" >> $wishlist
+  done
+
+  printf "\n"
+
+  popd &>/dev/null
+done
+
+echo "done!"
+
+open ./generated/
